@@ -32,7 +32,7 @@ library(forcats)
 library(scales)
 ```
 ```{r}
-setwd(choose.dir())
+setwd(rstudioapi::selectDirectory())
 ```
 
 ```{r}
@@ -295,7 +295,7 @@ orders <- orders |>
 ```
 
 ```{r}
-ordersorders |> 
+orders |> 
   count(purchase_month)
 ```
 ```{r}
@@ -345,4 +345,269 @@ ggplot(orders_monthly, aes(x = purchase_month, y = n)) +
     plot.margin = margin(15, 20, 15, 15)
   )
 ```
+
+Filtering to have a dataset for the two time spans
+```{r}
+orders_sep17_sep18 <- orders |>
+  filter(
+    order_purchase_timestamp >= as.POSIXct("2017-09-01"),
+    order_purchase_timestamp <  as.POSIXct("2018-10-01")
+  )
+```
+
+```{r}
+orders_jan17_sep18 <- orders |>
+  filter(
+    order_purchase_timestamp >= as.POSIXct("2017-01-01"),
+    order_purchase_timestamp <  as.POSIXct("2018-10-01")
+  )
+```
+
+From the two datasets delating the orders without a delivery date
+```{r}
+delivered_sep17_sep18 <- orders_sep17_sep18 |>
+  filter(order_status == "delivered", !is.na(order_delivered_customer_date))
+
+delivered_jan17_sep18 <- orders_jan17_sep18 |>
+  filter(order_status == "delivered", !is.na(order_delivered_customer_date))
+```
+
+
+Creating the variables time_to_delivery_days (delivered date - purchase date), delay_days (delivered time-estimated time) and is_late (as a True or False)
+```{r}
+delivered_sep17_sep18 <- delivered_sep17_sep18 %>% mutate(
+      time_to_delivery_days = as.numeric(
+        difftime(order_delivered_customer_date,
+                 order_purchase_timestamp,
+                 units = "days")), 
+      delay_days = as.numeric(
+        as_date(order_delivered_customer_date) -
+          as_date(order_estimated_delivery_date)),
+      is_late = delay_days > 0)
+delivered_jan17_sep18 <- delivered_jan17_sep18 %>% mutate(
+      time_to_delivery_days = as.numeric(
+        difftime(order_delivered_customer_date,
+                 order_purchase_timestamp,
+                 units = "days")),
+      delay_days = as.numeric(
+        as_date(order_delivered_customer_date) -
+          as_date(order_estimated_delivery_date)),
+      is_late = delay_days > 0)
+```
+
+Analyzing the variables just created
+```{r}
+delivered_sep17_sep18 |>
+  summarise(orders = n(),
+            median_time_to_delivery = median(time_to_delivery_days),
+            mean_time_to_delivery   = mean(time_to_delivery_days),
+            median_delay = median(delay_days),
+            late_orders  = sum(is_late),
+            late_share   = mean(is_late))
+
+delivered_jan17_sep18 |>
+  summarise(orders = n(),
+            median_time_to_delivery = median(time_to_delivery_days),
+            mean_time_to_delivery   = mean(time_to_delivery_days),
+            median_delay = median(delay_days),
+            late_orders  = sum(is_late),
+            late_share   = mean(is_late))
+```
+Analyzing delay for sep17_sep18
+```{r}
+delivered_sep17_sep18 %>% summarise(
+    orders = n(),
+    mean   = mean(delay_days),
+    sd     = sd(delay_days),
+    min    = min(delay_days),
+    p25    = quantile(delay_days, 0.25),
+    median = median(delay_days),
+    p75    = quantile(delay_days, 0.75),
+    max    = max(delay_days),
+    share_early       = mean(delay_days < 0),
+    share_on_the_day  = mean(delay_days == 0),
+    share_late        = mean(delay_days > 0),
+    share_late_over_7 = mean(delay_days > 7),
+    median_days_late_of_late_orders = median(delay_days[delay_days > 0])
+  )
+```
+
+```{r}
+delay_median <- median(delivered_sep17_sep18$delay_days)
+late_share   <- mean(delivered_sep17_sep18$is_late)
+
+ggplot(delivered_sep17_sep18, aes(x = delay_days, fill = is_late)) +
+  geom_histogram(binwidth = 1, boundary = 0.5, alpha = 0.85, show.legend = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40", linewidth = 0.8) +
+  geom_vline(xintercept = delay_median, color = "#2A9D8F", linewidth = 1.2) +
+  annotate(
+    "label",
+    x = delay_median, y = Inf, vjust = 1.5,
+    label = paste0("Median: ", delay_median, " days"),
+    color = "#2A9D8F", fontface = "bold", fill = "white", linewidth = 0
+  ) +
+  annotate(
+    "label",
+    x = 15, y = Inf, vjust = 1.5,
+    label = paste0("Late: ", percent(late_share, accuracy = 0.1)),
+    color = "#E76F51", fontface = "bold", fill = "white", linewidth = 0
+  ) +
+  scale_fill_manual(values = c(`FALSE` = "#2A9D8F", `TRUE` = "#E76F51")) +
+  scale_x_continuous(breaks = seq(-60, 40, by = 10)) +
+  scale_y_continuous(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  coord_cartesian(xlim = c(-60, 40)) +
+  labs(
+    title = "Delivery delay compared with the estimated date",
+    subtitle = "Sep 2017 – Sep 2018, late orders highlighted (axis cut at -60/+40 days)",
+    x = "Delay (days, negative = early)",
+    y = "Number of orders"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    plot.subtitle = element_text(color = "grey40", margin = margin(b = 12)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "grey90"),
+    plot.margin = margin(15, 20, 15, 15)
+  )
+```
+
+
+```{r}
+delivered_jan17_sep18 %>% summarise(
+    orders = n(),
+    mean   = mean(delay_days),
+    sd     = sd(delay_days),
+    min    = min(delay_days),
+    p25    = quantile(delay_days, 0.25),
+    median = median(delay_days),
+    p75    = quantile(delay_days, 0.75),
+    max    = max(delay_days),
+    share_early       = mean(delay_days < 0),
+    share_on_the_day  = mean(delay_days == 0),
+    share_late        = mean(delay_days > 0),
+    share_late_over_7 = mean(delay_days > 7),
+    median_days_late_of_late_orders = median(delay_days[delay_days > 0])
+  )
+```
+
+```{r}
+delay_median <- median(delivered_jan17_sep18$delay_days)
+late_share   <- mean(delivered_jan17_sep18$is_late)
+
+ggplot(delivered_jan17_sep18, aes(x = delay_days, fill = is_late)) +
+  geom_histogram(binwidth = 1, boundary = 0.5, alpha = 0.85, show.legend = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40", linewidth = 0.8) +
+  geom_vline(xintercept = delay_median, color = "#2A9D8F", linewidth = 1.2) +
+  annotate(
+    "label",
+    x = delay_median, y = Inf, vjust = 1.5,
+    label = paste0("Median: ", delay_median, " days"),
+    color = "#2A9D8F", fontface = "bold", fill = "white", linewidth = 0
+  ) +
+  annotate(
+    "label",
+    x = 15, y = Inf, vjust = 1.5,
+    label = paste0("Late: ", percent(late_share, accuracy = 0.1)),
+    color = "#E76F51", fontface = "bold", fill = "white", linewidth = 0
+  ) +
+  scale_fill_manual(values = c(`FALSE` = "#2A9D8F", `TRUE` = "#E76F51")) +
+  scale_x_continuous(breaks = seq(-60, 40, by = 10)) +
+  scale_y_continuous(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  coord_cartesian(xlim = c(-60, 40)) +
+  labs(
+    title = "Delivery delay compared with the estimated date",
+    subtitle = "Sep 2017 – Sep 2018, late orders highlighted (axis cut at -60/+40 days)",
+    x = "Delay (days, negative = early)",
+    y = "Number of orders"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    plot.subtitle = element_text(color = "grey40", margin = margin(b = 12)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "grey90"),
+    plot.margin = margin(15, 20, 15, 15)
+  )
+```
+
+```
+
+Creatin the labels for lateness
+```{r}
+delivered_sep17_sep18 <- delivered_sep17_sep18 %>%
+  mutate(
+    lateness = cut(
+      delay_days,
+      breaks = c(-Inf, -8, -4, -1, 0, 3, 7, Inf),
+      labels = c("Very early (8+ days)", "Early (4-7 days)", "Slightly early (1-3 days)",
+                 "On time", "Slightly late (1-3 days)", "Late (4-7 days)", "Very late (8+ days)")
+    )
+  )
+
+count(delivered_sep17_sep18, lateness)
+
+delivered_jan17_sep18 <- delivered_jan17_sep18 %>%
+  mutate(
+    lateness = cut(
+      delay_days,
+      breaks = c(-Inf, -8, -4, -1, 0, 3, 7, Inf),
+      labels = c("Very early (8+ days)", "Early (4-7 days)", "Slightly early (1-3 days)",
+                 "On time", "Slightly late (1-3 days)", "Late (4-7 days)", "Very late (8+ days)")
+    )
+  )
+
+count(delivered_jan17_sep18, lateness)
+```
+
+Analyzing time to delivery
+```{r}
+delivered_sep17_sep18 %>%
+  summarise(
+    orders = n(),
+    mean   = mean(time_to_delivery_days),
+    sd     = sd(time_to_delivery_days),
+    min    = min(time_to_delivery_days),
+    p25    = quantile(time_to_delivery_days, 0.25),
+    median = median(time_to_delivery_days),
+    p75    = quantile(time_to_delivery_days, 0.75),
+    p90    = quantile(time_to_delivery_days, 0.90),
+    p95    = quantile(time_to_delivery_days, 0.95),
+    max    = max(time_to_delivery_days),
+    share_within_7_days  = mean(time_to_delivery_days <= 7),
+    share_over_30_days   = mean(time_to_delivery_days > 30)
+  )
+  
+delivered_jan17_sep18 %>%
+  summarise(
+    orders = n(),
+    mean   = mean(time_to_delivery_days),
+    sd     = sd(time_to_delivery_days),
+    min    = min(time_to_delivery_days),
+    p25    = quantile(time_to_delivery_days, 0.25),
+    median = median(time_to_delivery_days),
+    p75    = quantile(time_to_delivery_days, 0.75),
+    p90    = quantile(time_to_delivery_days, 0.90),
+    p95    = quantile(time_to_delivery_days, 0.95),
+    max    = max(time_to_delivery_days),
+    share_within_7_days  = mean(time_to_delivery_days <= 7),
+    share_over_30_days   = mean(time_to_delivery_days > 30)
+  )
+```
+
+
+
+
+
+
+
+
 

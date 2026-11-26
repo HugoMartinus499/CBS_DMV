@@ -35,21 +35,155 @@ setwd(choose.dir())
 
 ```{r}
 orders <- read.csv("olist_orders_dataset.csv", na = c("","NA"))
-order_reviews <- read.csv("olist_order_reviews_dataset.csv")
-customers <- read.csv("olist_customers_dataset.csv")
-order_items <- read.csv("olist_order_items_dataset.csv")
-sellers <- read.csv("olist_sellers_dataset.csv")
-products <- read.csv("olist_products_dataset.csv")
-product_name_trans <- read.csv("product_category_name_translation.csv")
+order_reviews <- read.csv("olist_order_reviews_dataset.csv", na = c("","NA"))
+customers <- read.csv("olist_customers_dataset.csv", na = c("","NA"))
+order_items <- read.csv("olist_order_items_dataset.csv", na = c("","NA"))
+sellers <- read.csv("olist_sellers_dataset.csv", na = c("","NA"))
+products <- read.csv("olist_products_dataset.csv", na = c("","NA"))
+product_name_trans <- read.csv("product_category_name_translation.csv", na = c("","NA"))
 ```
 
+# Inspect the data
+
+```{r}
+dim(orders)
+dim(order_reviews)
+dim(customers)
+dim(order_items)
+dim(sellers)
+dim(products)
+dim(product_name_trans)
+```
+```{r}
+glimpse(orders)
+glimpse(order_reviews)
+glimpse(customers)
+glimpse(order_items)
+glimpse(sellers)
+glimpse(products)
+glimpse(product_name_trans)
+```
+
+```{r}
+names(orders)
+names(order_reviews)
+names(customers)
+```
+
+```{r}
+str(orders)
+```
+
+```{r}
+class(orders$order_purchase_timestamp)
+class(orders$order_delivered_customer_date)
+class(orders$order_estimated_delivery_date)
+```
+Since the dates in the orders data are characters and we need them as dates, we convert them
+```{r}
+orders <- orders %>%
+  mutate(
+    order_purchase_timestamp = 
+      as.POSIXct(order_purchase_timestamp,
+      format = "%Y-%m-%d %H:%M:%S"),
+
+    order_approved_at =
+      as.POSIXct(order_approved_at,
+                 format = "%Y-%m-%d %H:%M:%S"),
+    
+    order_delivered_carrier_date =
+      as.POSIXct(order_delivered_carrier_date,
+                 format = "%Y-%m-%d %H:%M:%S"),
+    
+    order_delivered_customer_date =
+      as.POSIXct(order_delivered_customer_date,
+                 format = "%Y-%m-%d %H:%M:%S"),
+
+    order_estimated_delivery_date =
+      as.POSIXct(order_estimated_delivery_date,
+                 format = "%Y-%m-%d %H:%M:%S")    
+  )
+```
+
+```{r}
+head(orders)
+```
+
+find missing values
 ```{r}
 colSums(is.na(orders))
+colSums(is.na(order_reviews))
+colSums(is.na(customers))
+colSums(is.na(order_items))
+colSums(is.na(sellers))
+colSums(is.na(products))
+colSums(is.na(product_name_trans))
+```
+
+Check by delivery status
+```{r}
+orders |> 
+  filter(is.na(order_delivered_customer_date)) |> 
+  count(order_status)
+```
+
+Check duplicates and IDs
+```{r}
+sum(duplicated(orders))
+sum(duplicated(order_reviews))
+sum(duplicated(customers))
+sum(duplicated(order_items))
+sum(duplicated(sellers))
+sum(duplicated(products))
+```
+```{r}
+orders %>%
+  count(order_id) %>%
+  filter(n > 1)
+```
+```{r}
+orders %>%
+  count(order_id) %>%
+  summarise(
+    orders = n(),
+    duplicated_orders = sum(n > 1)
+  )
+```
+So one row is one order as we expect
+
+Check Customers
+
+```{r}
+customers %>%
+  count(customer_id) %>%
+  filter(n > 1)
 ```
 
 ```{r}
-orders_group_status <- orders |> 
-  group_by(order_status) |> 
-  summarise()
+n_distinct(customers$customer_id)
+n_distinct(customers$customer_unique_id)
 ```
+Meaning that a person can have multiple orders, but most have just one.
+
+Check order items
+```{r}
+order_items %>%
+  count(order_id) %>%
+  summarise(
+    orders = n(),
+    orders_with_multiple_items = sum(n > 1)
+  )
+```
+Check reviews
+```{r}
+order_reviews %>%
+  count(order_id) %>%
+  count(n, name = "number_of_orders")
+```
+```{r}
+order_reviews %>%
+  count(order_id) %>%
+  filter(n > 1)
+```
+So orders can have more than one review
 

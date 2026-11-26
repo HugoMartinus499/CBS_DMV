@@ -23,6 +23,6 @@ Sofiia and Patrizia
 
 Hugo and Giulia
 - [x] Load files
-- [ ] Explore data in R
-- [ ] Visualize in R
+- [x] Explore data in R
 - [ ] Data analysis
+- [ ] Visuals

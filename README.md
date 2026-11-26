@@ -22,7 +22,7 @@ Sofiia and Patrizia
 - [ ] Start on report
 
 Hugo and Giulia
-- [ ] Load files
+- [x] Load files
 - [ ] Explore data in R
 - [ ] Visualize in R
 - [ ] Data analysis

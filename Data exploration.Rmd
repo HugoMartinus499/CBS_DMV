@@ -28,6 +28,8 @@ library(dlookr)
 library(flextable)
 library(rstanarm)
 library(performance)
+library(forcats)
+library(scales)
 ```
 ```{r}
 setwd(choose.dir())
@@ -137,13 +139,13 @@ sum(duplicated(sellers))
 sum(duplicated(products))
 ```
 ```{r}
-orders %>%
-  count(order_id) %>%
+orders |> 
+  count(order_id) |> 
   filter(n > 1)
 ```
 ```{r}
-orders %>%
-  count(order_id) %>%
+orders |> 
+  count(order_id) |> 
   summarise(
     orders = n(),
     duplicated_orders = sum(n > 1)
@@ -154,8 +156,8 @@ So one row is one order as we expect
 Check Customers
 
 ```{r}
-customers %>%
-  count(customer_id) %>%
+customers |> 
+  count(customer_id) |> 
   filter(n > 1)
 ```
 
@@ -167,8 +169,8 @@ Meaning that a person can have multiple orders, but most have just one.
 
 Check order items
 ```{r}
-order_items %>%
-  count(order_id) %>%
+order_items |> 
+  count(order_id) |> 
   summarise(
     orders = n(),
     orders_with_multiple_items = sum(n > 1)
@@ -176,14 +178,171 @@ order_items %>%
 ```
 Check reviews
 ```{r}
-order_reviews %>%
-  count(order_id) %>%
+order_reviews |> 
+  count(order_id) |> 
   count(n, name = "number_of_orders")
 ```
 ```{r}
-order_reviews %>%
-  count(order_id) %>%
+order_reviews |> 
+  count(order_id) |> 
   filter(n > 1)
 ```
 So orders can have more than one review
+Check categorial variables
+```{r}
+count(orders, order_status)
+count(customers, customer_state, sort = TRUE)
+count(products, product_category_name, sort = TRUE)
+```
+# Analysis
+
+Check order status and how many orders were delivered
+
+```{r}
+orders |> 
+  count(order_status) |> 
+  mutate(
+    percentage = n / sum(n)
+  )
+```
+```{r}
+orders |> 
+  count(order_status) |> 
+  mutate(order_status = fct_reorder(order_status, n)) |> 
+  ggplot(aes(x = order_status, y = n, fill = order_status)) +
+  geom_col(width = 0.7, show.legend = FALSE) +
+  geom_text(
+    aes(label = comma(n)),
+    hjust = -0.15,
+    size = 4,
+    fontface = "bold",
+    color = "red4"
+  ) +
+  scale_fill_viridis_d(option = "mako", begin = 0.2, end = 0.8) +
+  scale_y_continuous(
+    labels = comma,    
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  coord_flip() +
+  labs(
+    title = "Number of orders by order status",
+    subtitle = "Sorted from most to least common",
+    x = NULL,
+    y = "Number of orders"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    plot.subtitle = element_text(color = "grey40", margin = margin(b = 12)),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color = "grey90"),
+    axis.text.y = element_text(face = "bold"),
+    plot.margin = margin(15, 20, 15, 15))
+```
+Check delivery rate
+
+```{r}
+orders |> 
+  summarise(
+    total_orders = n(),
+    delivered_orders = sum(order_status == "delivered"),
+    non_delivered_orders = sum(order_status != "delivered"),
+    delivered_share = mean(order_status == "delivered")
+  )
+```
+Check dates
+```{r}
+orders |> 
+  summarise(
+    earliest_purchase = min(order_purchase_timestamp, na.rm = TRUE),
+    latest_purchase = max(order_purchase_timestamp, na.rm = TRUE)
+  )
+```
+```{r}
+orders |> 
+  summarise(
+    earliest_delivery = min(order_delivered_customer_date, na.rm = TRUE),
+    latest_delivery = max(order_delivered_customer_date, na.rm = TRUE)
+  )
+```
+
+Check for impossible sequences
+```{r}
+orders |> 
+  filter(
+    order_delivered_customer_date < order_purchase_timestamp
+  )
+```
+```{r}
+orders |> 
+  filter(
+    order_delivered_customer_date <
+      order_approved_at
+  )
+```
+So a bit weird with these 61 orders that were delivered before they were approved.
+
+Examine the time period
+```{r}
+orders <- orders |> 
+  mutate(
+    purchase_month = floor_date(
+      order_purchase_timestamp,
+      unit = "month"
+    )
+  )
+```
+
+```{r}
+ordersorders |> 
+  count(purchase_month)
+```
+```{r}
+head(orders)
+```
+```{r}
+orders_monthly <- orders |>  count(purchase_month)
+```
+
+
+```{r}
+peak <- orders_monthly %>% filter(n == max(n))
+
+ggplot(orders_monthly, aes(x = purchase_month, y = n)) +
+  geom_area(fill = "#2A9D8F", alpha = 0.2) +
+  geom_line(color = "#2A9D8F", linewidth = 1.2) +
+  geom_point(color = "#2A9D8F", size = 2.5) +
+  geom_point(data = peak, color = "#E76F51", size = 5) +
+  geom_label(
+    data = peak,
+    aes(label = paste0("Peak: ", comma(n))),
+    color = "#E76F51",
+    fontface = "bold",
+    vjust = -0.8,
+    linewidth = 0,
+    fill = "white"
+  ) +
+  scale_x_date(date_breaks = "2 months", date_labels = "%b %Y") +
+  scale_y_continuous(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.2))
+  ) +
+  labs(
+    title = "Number of orders over time",
+    subtitle = "Monthly order volume, with the busiest month highlighted",
+    x = NULL,
+    y = "Number of orders"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    plot.subtitle = element_text(color = "grey40", margin = margin(b = 12)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "grey90"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(15, 20, 15, 15)
+  )
+```
 
